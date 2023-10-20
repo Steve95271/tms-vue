@@ -34,7 +34,7 @@
             <!-- <input type="button" @click="handleLogout()" v-model="currentUser" style="margin-right: 10px;"> -->
 
             <el-button size="mini" type="primary" @click="refreshData()">Refresh</el-button>
-            
+
             <!-- Logout -->
             <el-dropdown @command="handleLogout()">
               <input type="button" v-model="currentUser" style="margin-right: 10px;">
@@ -60,8 +60,8 @@
               <el-table-column prop="dueDate" label="Due date" width="120">
               </el-table-column>
 
-              <!-- edit and delete button -->
-              <el-table-column width="180">
+              <!-- edit, delete and complete button -->
+              <el-table-column>
                 <template slot-scope="scope">
                   <el-button size="mini" @click="handleEdit(scope.$index, scope.row)">
                     Edit
@@ -69,15 +69,9 @@
                   <el-button size="mini" type="danger" @click="handleDelete(scope.$index, scope.row)">
                     Delete
                   </el-button>
-
-
-                </template>
-              </el-table-column>
-
-              <!-- complete button -->
-              <el-table-column>
-                <template>
-                  <el-button size="mini" type="success" @click="handleComplete()">Complete</el-button>
+                  <el-button size="mini" type="success" @click="handleComplete(scope.$index, scope.row)">
+                    Complete
+                  </el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -90,8 +84,12 @@
 
       <el-footer style="margin-top: 10px">
         <!-- Add Task button -->
-        <el-button type="primary" style="position: absolute; right: 100px" @click="addTaskDialogFormVisible = true">
+        <el-button type="primary" style="position: absolute; right: 100px" @click="handleAddTaks()">
           Add Task
+        </el-button>
+
+        <el-button type="success" style="position: absolute; right: 250px" @click="handleTestButton()">
+          Test Button
         </el-button>
 
         <!-- Add Task dialog -->
@@ -135,6 +133,15 @@
                 value-format="yyyy-MM-dd">
               </el-date-picker>
             </el-form-item>
+
+            <el-form-item label="Priority" :label-width="formLabelWidth">
+              <el-button type="primary" round style="margin-right: 20px;" @click="handleImportant()">
+                Mark
+              </el-button>
+              <span v-if="editDialogData.status == 1" style="font-size: 20px;">Normal Task</span>
+              <span v-if="editDialogData.status == 2" style="font-size: 20px;">Important Task</span>
+            </el-form-item>
+
           </el-form>
 
           <div slot="footer" class="dialog-footer">
@@ -164,30 +171,23 @@ export default {
       editDialogFormVisible: false,
 
       addTaskData: {
-        id: '',
         taskTitle: '',
         taskContent: '',
         dueDate: ''
       },
 
-      editDialogData: {
-        id: '',
-        taskTitle: '',
-        taskContent: '',
-        dueDate: ''
-      },
+      editDialogData: {},
 
       formLabelWidth: '120px',
 
-      currentUser: 'Steve'
-
+      currentUser: 'Steve',
 
     }
   },
 
   mounted() {
     // Sent request to Spring Boot application to get data
-    axios.get("tasks").then((result) => {
+    axios.get("tasks/unfinished").then((result) => {
       this.tableData = result.data.data
     })
   },
@@ -196,7 +196,31 @@ export default {
     submit: function () {
       this.addTaskDialogFormVisible = false
 
-      alert(JSON.stringify(this.addTaskData))
+      axios.post("tasks", {
+        taskTitle: this.addTaskData.taskTitle,
+        taskContent: this.addTaskData.taskContent,
+        dueDate: this.addTaskData.dueDate
+      }).then((result) => {
+        //获取响应码
+        var respondCode = result.data.respondCode
+
+        //如果为1，数据修改成功，调用get API跟新数据
+        if (respondCode == 1) {
+          axios.get("tasks/unfinished").then((result) => {
+            var data = result.data;
+
+            this.tableData = data.data;
+
+            this.$notify({
+              title: data.message,
+              message: 'Add a new task',
+              type: 'success'
+            });
+          })
+        }
+      })
+
+
     },
 
     updateSubmit: function () {
@@ -206,49 +230,118 @@ export default {
         id: this.editDialogData.id,
         taskTitle: this.editDialogData.taskTitle,
         taskContent: this.editDialogData.taskContent,
-        dueDate: this.editDialogData.dueDate
+        dueDate: this.editDialogData.dueDate,
+        status: this.editDialogData.status
       }).then((result) => {
-        this.tableData = result.data.data
-      });
+        //Get respond code
+        var respondCode = result.data.respondCode
 
-      
+        //if respond code is 1, update success, refresh the page
+        if (respondCode == 1) {
+          axios.get("tasks/unfinished").then((result) => {
+            var data = result.data;
+
+            this.tableData = data.data;
+
+            alert(data.message);
+          })
+        }
+      });
 
       this.editDialogFormVisible = false
     },
 
+
     refreshData: function () {
-      axios.get("tasks").then((result) => {
-        this.tableData = result.data.data
+      axios.get("tasks/unfinished").then((result) => {
+        var data = result.data;
+
+        this.tableData = data.data;
       })
     },
 
-    handleEdit: function (index) {
+    handleEdit: function (index, row) {
       this.editDialogFormVisible = true;
 
-      var getId = index + 1;
+      var data = (index, row);
 
-      //alert(JSON.stringify("tasks/" + getId))
+      var id = data.id;
 
-      axios.get("tasks/" + getId).then((result) => {
+
+      axios.get("tasks/" + id).then((result) => {
         this.editDialogData = result.data.data
       })
     },
 
-    handleComplete: function () {
+    handleComplete: function (index, row) {
 
-      alert("Misson Complete!")
+      var data = (index, row);
 
+      var id = data.id
+
+      axios.put("tasks/" + id).then((result) => {
+        //Get respond code
+        var respondCode = result.data.respondCode
+
+        //if respond code is 1, update success, refresh the page
+        if (respondCode == 1) {
+          axios.get("tasks/unfinished").then((result) => {
+            var data = result.data;
+
+            this.tableData = data.data;
+
+            console.log(data.message);
+          })
+        }
+      })
     },
 
-    handleDelete: function () {
-      alert("Task deleted")
+    handleDelete: function (index, row) {
+      var data = (index, row);
+
+      var id = data.id;
+
+      axios.delete("tasks/" + id).then((result) => {
+        var respondCode = result.data.respondCode;
+
+        if (respondCode == 1) {
+          axios.get("tasks/unfinished").then((result) => {
+            var data = result.data;
+
+            this.tableData = data.data;
+
+            this.$notify({
+              title: data.message,
+              message: 'Deleted a task',
+              type: 'warning'
+            });
+          })
+        }
+      })
     },
 
     handleLogout: function () {
       alert("User sign off")
+    },
+
+    handleAddTaks: function () {
+      this.addTaskDialogFormVisible = true;
+    },
+
+    handleTestButton: function () {
+      //var getId = Number(this.tableData.id);
+
+      alert(this.tableData.data);
+    },
+
+    handleImportant: function () {
+
+      this.editDialogData.status = 2;
+
     }
   },
 }
+
 </script>
 
 <style lang="scss" scoped></style>
